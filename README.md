@@ -20,5 +20,5 @@ Supports multiple simultaneous commands, response channels, and debug logging.
 ## 📦 Installation
 
 ```bash
-go get github.com/yourusername/mikrotik-go
+go get github.com/leandrose/go-routeros
 ```
