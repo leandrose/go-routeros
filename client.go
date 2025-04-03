@@ -207,6 +207,8 @@ func (c *Client) readLoop() {
 			errRouterOS := RouterOSError{}
 			if e, ok := response.Data["message"]; ok {
 				errRouterOS.message = e
+			} else {
+				errRouterOS.message = "an error occurred"
 			}
 			response.Err = &errRouterOS
 		}
