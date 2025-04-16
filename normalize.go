@@ -62,19 +62,25 @@ func NormalizeToCommandLine(menu string, sentence ...string) string {
 		}
 	}
 
-	if len(parts) == 0 {
-		return menu
-	}
-
 	segments := strings.SplitAfter(menu, "/")
 	cmd := strings.TrimSpace(segments[len(segments)-1])
-
 	pre := strings.TrimRight(" "+strings.Join(preArgs, " "), " ")
+	if len(parts) == 0 {
+		switch cmd {
+		case "add":
+			return menu + pre
+		default:
+			return menu
+		}
+	}
+
 	switch cmd {
 	case "print":
 		return menu + " where " + strings.Join(parts, " and ")
 	case "set", "remove", "unset", "disable", "enable":
 		return menu + pre + " [find " + strings.Join(parts, " and ") + "]"
+	case "add":
+		return menu + pre
 	default:
 		return menu + " " + strings.Join(parts, " ")
 	}

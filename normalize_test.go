@@ -51,6 +51,12 @@ func TestNormalizeToCommandLineByPrint(t *testing.T) {
 			[]string{"=address=1.1.1.2", "?list=aviso", "?list=block", "?#|", "?disabled=no", "?#&"},
 			"/ip/firewall/address-list/set address=1.1.1.2 [find (list=aviso or list=block) and disabled=no]",
 		},
+		{
+			"Set com OR agrupado e AND externo",
+			"/ip/firewall/address-list/add",
+			[]string{"=address=1.1.1.2", "=address=1.1.1.2", "=list=aviso"},
+			"/ip/firewall/address-list/add address=1.1.1.2 list=aviso",
+		},
 	}
 
 	for _, tt := range tests {
