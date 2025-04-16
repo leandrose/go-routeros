@@ -36,7 +36,11 @@ func NormalizeToCommandLine(menu string, sentence ...string) string {
 			continue
 		default:
 			if strings.HasPrefix(s, "=") {
-				preArgs = append(preArgs, strings.TrimPrefix(s, "="))
+				split := strings.SplitN(strings.TrimPrefix(s, "="), "=", 2)
+				if strings.Contains(split[1], " ") {
+					split[1] = "\"" + split[1] + "\""
+				}
+				preArgs = append(preArgs, strings.Join(split, "="))
 			} else {
 				s = strings.TrimPrefix(s, "?")
 				current.conds = append(current.conds, s)
