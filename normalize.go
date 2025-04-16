@@ -71,7 +71,7 @@ func NormalizeToCommandLine(menu string, sentence ...string) string {
 	pre := strings.TrimRight(" "+strings.Join(preArgs, " "), " ")
 	if len(parts) == 0 {
 		switch cmd {
-		case "add":
+		case "add", "set":
 			return menu + pre
 		default:
 			return menu
