@@ -3,7 +3,9 @@ package go_routeros
 import (
 	"bufio"
 	"context"
+	"crypto/md5"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -104,11 +106,32 @@ func (c *Client) Login(username, password string) error {
 
 	for {
 		sentence, err := c.readSentence()
+		if err != nil {
+			return err
+		}
 		if c.debug {
 			fmt.Printf("DEBUG LOGIN: %+v\n", sentence)
 		}
-		if err != nil {
-			return err
+		if v, ok := sentence["ret"]; ok {
+			var dec []byte
+			if dec, err = hex.DecodeString(v); err != nil {
+				return err
+			}
+			sent = []string{
+				"/login",
+				fmt.Sprintf("=name=%s", username),
+				fmt.Sprintf("=response=%s", c.challengeResponse(dec, password)),
+			}
+			if err := c.writeSentence(sent); err != nil {
+				return err
+			}
+			sentence, err = c.readSentence()
+			if err != nil {
+				return err
+			}
+			if c.debug {
+				fmt.Printf("DEBUG LOGIN: %+v\n", sentence)
+			}
 		}
 		if v, ok := sentence["!type"]; ok {
 			if v == "!done" {
@@ -230,4 +253,13 @@ func (c *Client) EnableDebug() {
 
 func (c *Client) DisableDebug() {
 	c.debug = false
+}
+
+// challengeResponse - prepare MD5 hash for auth challenge response
+func (c *Client) challengeResponse(cha []byte, password string) string {
+	h := md5.New() //nolint:gosec
+	h.Write([]byte{0})
+	h.Write([]byte(password))
+	h.Write(cha)
+	return fmt.Sprintf("00%x", h.Sum(nil))
 }
