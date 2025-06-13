@@ -192,6 +192,7 @@ func (c *Client) readLoop() {
 		return
 	}
 	defer c.loopMutex.Unlock()
+
 	for {
 		sentence, err := c.readSentence()
 		if err != nil {
@@ -237,7 +238,10 @@ func (c *Client) readLoop() {
 			response.Err = &errRouterOS
 		}
 
-		ch <- response
+		select {
+		case ch <- response:
+		default:
+		}
 
 		if response.Type == "!done" || response.Type == "!trap" || response.Type == "!fatal" || response.Type == "!empty" {
 			c.lock.Lock()
