@@ -200,6 +200,7 @@ func (c *Client) readLoop() {
 				c.Close()
 				return
 			}
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 
