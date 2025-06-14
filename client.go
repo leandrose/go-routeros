@@ -238,10 +238,7 @@ func (c *Client) readLoop() {
 			response.Err = &errRouterOS
 		}
 
-		select {
-		case ch <- response:
-		default:
-		}
+		ch <- response
 
 		if response.Type == "!done" || response.Type == "!trap" || response.Type == "!fatal" || response.Type == "!empty" {
 			c.lock.Lock()
