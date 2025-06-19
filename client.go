@@ -16,6 +16,8 @@ import (
 )
 
 type Client struct {
+	ctx         context.Context
+	cancel      context.CancelFunc
 	conn        io.ReadWriteCloser
 	lock        sync.Mutex
 	reader      *bufio.Reader
@@ -23,6 +25,7 @@ type Client struct {
 	nextID      int
 	debug       bool
 	loopMutex   sync.Mutex
+	loopStatus  bool
 	isConnected bool
 }
 
@@ -81,15 +84,16 @@ func DialTLSContext(ctx context.Context, address string, tlsConfig *tls.Config) 
 
 // Close the connection
 func (c *Client) Close() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.cancel()
 	c.isConnected = false
 	if c.conn != nil {
 		_ = c.conn.Close()
 	}
 	for k, ch := range c.responses {
-		c.lock.Lock()
-		delete(c.responses, k)
-		c.lock.Unlock()
 		close(ch)
+		delete(c.responses, k)
 	}
 }
 
@@ -136,7 +140,7 @@ func (c *Client) Login(username, password string) error {
 		if v, ok := sentence["!type"]; ok {
 			if v == "!done" {
 				c.isConnected = true
-				go c.readLoop()
+				c.startReadLoop()
 				return nil
 			}
 			if sentence["!type"] == "!trap" || sentence["!type"] == "!fatal" {
@@ -187,64 +191,91 @@ func (c *Client) sendErrorAllResponses(err error) {
 	}
 }
 
-func (c *Client) readLoop() {
-	if !c.loopMutex.TryLock() {
-		return
-	}
+func (c *Client) startReadLoop() {
+	c.loopMutex.Lock()
 	defer c.loopMutex.Unlock()
+	if c.cancel != nil {
+		c.cancel()
+	}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 
+	count := 0
 	for {
-		sentence, err := c.readSentence()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				c.sendErrorAllResponses(err)
-				c.Close()
-				return
+		count = +1
+		if c.loopStatus == false {
+			go c.readLoop()
+			return
+		}
+		if count > 100 {
+			c.Close()
+			return
+		}
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func (c *Client) readLoop() {
+	c.loopStatus = true
+	defer func() {
+		c.loopStatus = false
+	}()
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+			sentence, err := c.readSentence()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					c.sendErrorAllResponses(err)
+					c.Close()
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
 
-		tag := sentence[".tag"]
-		if tag == "" {
-			continue
-		}
-
-		id, err := strconv.ParseInt(tag, 10, 32)
-		if err != nil {
-			continue
-		}
-
-		c.lock.Lock()
-		ch, ok := c.responses[int(id)]
-		c.lock.Unlock()
-
-		if !ok {
-			continue
-		}
-
-		response := Response{
-			Type: sentence["!type"],
-			Data: sentence,
-		}
-
-		if response.Type == "!trap" || response.Type == "!fatal" {
-			errRouterOS := RouterOSError{}
-			if e, ok := response.Data["message"]; ok {
-				errRouterOS.message = e
-			} else {
-				errRouterOS.message = "an error occurred"
+			tag := sentence[".tag"]
+			if tag == "" {
+				continue
 			}
-			response.Err = &errRouterOS
-		}
 
-		ch <- response
+			id, err := strconv.ParseInt(tag, 10, 32)
+			if err != nil {
+				continue
+			}
 
-		if response.Type == "!done" || response.Type == "!trap" || response.Type == "!fatal" || response.Type == "!empty" {
 			c.lock.Lock()
-			delete(c.responses, int(id))
+			ch, ok := c.responses[int(id)]
 			c.lock.Unlock()
-			close(ch)
+
+			if !ok {
+				continue
+			}
+
+			response := Response{
+				Type: sentence["!type"],
+				Data: sentence,
+			}
+
+			if response.Type == "!trap" || response.Type == "!fatal" {
+				errRouterOS := RouterOSError{}
+				if e, ok := response.Data["message"]; ok {
+					errRouterOS.message = e
+				} else {
+					errRouterOS.message = "an error occurred"
+				}
+				response.Err = &errRouterOS
+			}
+
+			ch <- response
+
+			if response.Type == "!done" || response.Type == "!trap" || response.Type == "!fatal" || response.Type == "!empty" {
+				c.lock.Lock()
+				close(ch)
+				delete(c.responses, int(id))
+				c.lock.Unlock()
+			}
 		}
 	}
 }
