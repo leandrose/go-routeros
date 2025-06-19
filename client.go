@@ -86,7 +86,9 @@ func DialTLSContext(ctx context.Context, address string, tlsConfig *tls.Config) 
 func (c *Client) Close() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	c.isConnected = false
 	if c.conn != nil {
 		_ = c.conn.Close()
